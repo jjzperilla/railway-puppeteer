@@ -1,0 +1,11 @@
+{
+  "build": {
+    "nixpacks": {
+      "phases": {
+        "setup": {
+          "pkgs": ["chromium"]
+        }
+      }
+    }
+  }
+}
