@@ -16,5 +16,8 @@
   },
   "scripts": {
     "start": "PORT=8080 node index.js"
-  }
+  },
+"engines": {
+  "node": ">=20"
+}
 }
