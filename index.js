@@ -23,7 +23,6 @@ app.get("/api/track", async (req, res) => {
         // Launch Chromium and log confirmation
         browser = await puppeteer.launch({
             headless: "new", // Use the latest headless mode
-            executablePath: '/opt/render/project/.render/chrome/opt/google/chrome/chrome',
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
             timeout: 180000 // Increase browser launch timeout
         });
