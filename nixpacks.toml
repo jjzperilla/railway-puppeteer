@@ -1,21 +1,2 @@
 [build]
   node_version = "20"
-
-[phases.setup]
-  nixPkgs = [
-    "nss",
-    "gtk3",
-    "glibc",
-    "chromium",
-    "atk",
-    "cups",
-    "alsa-lib",
-    "pango",
-    "mesa",
-    "mesa.drivers",  # ✅ Fixed
-    "xorg.libX11",
-    "xorg.libXcomposite",
-    "xorg.libXdamage",
-    "xorg.libXrandr",
-    "xorg.libXshmfence"
-  ]
