@@ -1,60 +1,39 @@
 const express = require("express");
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const RecaptchaPlugin = require("puppeteer-extra-plugin-recaptcha");
 const cors = require("cors");
+const fs = require("fs");
 
 puppeteer.use(StealthPlugin());
-puppeteer.use(
-    RecaptchaPlugin({
-        visualFeedback: true, // Shows a visual hint when a captcha is detected
-    })
-);
 
 const app = express();
 app.use(cors());
 
-const MAX_RETRIES = 3; // Retry limit
+const MAX_RETRIES = 3; // Maximum retry attempts
+const RETRY_DELAY = 5000; // 5 seconds delay before retrying
 
-async function scrapeTracking(trackingNumber, attempt = 1) {
+async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
+    console.log(`Attempt ${attempt}: Scraping tracking number: ${trackingNumber}`);
+
     const url = `https://parcelsapp.com/en/tracking/${trackingNumber}`;
     let browser;
 
     try {
-        console.log(`[Attempt ${attempt}] Scraping tracking number:`, trackingNumber);
+        // Launch browser
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+            timeout: 180000,
+        });
 
-     browser = await puppeteer.launch({
-    headless: true, // Use true instead of "new" for better compatibility
-    args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-software-rasterizer",
-        "--disable-features=site-per-process",
-        "--disable-extensions",
-        "--disable-background-networking",
-        "--disable-sync",
-        "--disable-default-apps",
-        "--no-first-run"
-    ],
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined // Required for Railway
-});
-
-        console.log("✅ Chromium launched successfully");
+        console.log("Chromium launched successfully");
 
         const page = await browser.newPage();
 
         await page.setUserAgent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         );
-
         await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
-
-        // 🚀 Anti-Bot Detection Bypass
-        await page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, "webdriver", { get: () => false });
-        });
 
         // Block unnecessary resources
         await page.setRequestInterception(true);
@@ -66,28 +45,40 @@ async function scrapeTracking(trackingNumber, attempt = 1) {
             }
         });
 
-        console.log("🌍 Navigating to:", url);
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+        console.log("Navigating to:", url);
 
-        // ✅ Solve CAPTCHA if needed
-        await page.solveRecaptchas();
+        // Try to load the page
+        try {
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
+            console.log("DOM content loaded.");
+        } catch (error) {
+            console.log("DOM content loading failed, trying full load...");
+            await page.goto(url, { waitUntil: "load", timeout: 120000 });
+        }
 
-        // 🔄 Wait for tracking data to load
-        await page.waitForSelector(".event", { timeout: 60000 }).catch(() => {
-            console.log("⚠️ Tracking data not found, waiting longer...");
+        // Wait for tracking details to load
+        await page.waitForSelector(".event, .parcel-attributes", { timeout: 120000 }).catch(() => {
+            console.log("Tracking details not found yet...");
         });
 
-        console.log("✅ Page loaded, scraping data...");
+        // Take a screenshot for debugging
+        await page.screenshot({ path: `debug_attempt_${attempt}.png`, fullPage: true });
 
+        // Log HTML preview
+        const content = await page.content();
+        console.log("Page Content Preview:", content.substring(0, 500));
+
+        // Extract tracking events
         const trackingEvents = await page.evaluate(() => {
             return Array.from(document.querySelectorAll(".event")).map(event => ({
                 date: event.querySelector(".event-time strong")?.innerText.trim() || "N/A",
                 time: event.querySelector(".event-time span")?.innerText.trim() || "N/A",
                 status: event.querySelector(".event-content strong")?.innerText.trim() || "N/A",
-                courier: event.querySelector(".carrier")?.innerText.trim() || "N/A"
+                courier: event.querySelector(".carrier")?.innerText.trim() || "N/A",
             }));
         });
 
+        // Extract parcel information
         const parcelInfo = await page.evaluate(() => {
             const getText = (selector) => document.querySelector(selector)?.innerText.trim() || "N/A";
 
@@ -97,48 +88,55 @@ async function scrapeTracking(trackingNumber, attempt = 1) {
                 destination: getText(".parcel-attributes tr:nth-child(3) .value span:nth-child(2)"),
                 courier: getText(".parcel-attributes tr:nth-child(4) .value a"),
                 days_in_transit: getText(".parcel-attributes tr:nth-child(6) .value span"),
-                tracking_link: getText(".tracking-link input")
+                tracking_link: getText(".tracking-link input"),
             };
         });
 
-        if (!trackingEvents.length) {
-            console.log(`⚠️ No tracking data found on attempt ${attempt}`);
-            if (attempt < MAX_RETRIES) {
-                console.log(`🔄 Retrying... (Attempt ${attempt + 1})`);
-                await browser.close();
-                return scrapeTracking(trackingNumber, attempt + 1);
-            } else {
-                return { error: "Tracking information not found." };
-            }
+        console.log("Scraped data:", trackingEvents, parcelInfo);
+
+        // If no tracking events found, retry
+        if (!trackingEvents.length && attempt < MAX_RETRIES) {
+            console.log(`No tracking data found. Retrying in ${RETRY_DELAY / 1000} seconds...`);
+            await browser.close();
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+            return scrapeTrackingInfo(trackingNumber, attempt + 1);
         }
 
-        console.log("✅ Scraping completed successfully.");
         return { tracking_details: trackingEvents, parcel_info: parcelInfo };
 
     } catch (error) {
-        console.error("❌ Scraping error:", error);
+        console.error(`Error on attempt ${attempt}:`, error);
+        fs.writeFileSync("error_log.txt", error.toString(), "utf-8");
+
+        // Retry on failure
+        if (attempt < MAX_RETRIES) {
+            console.log(`Retrying attempt ${attempt + 1} in ${RETRY_DELAY / 1000} seconds...`);
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+            return scrapeTrackingInfo(trackingNumber, attempt + 1);
+        }
+
         return { error: error.message };
+
     } finally {
         if (browser) {
-            console.log("🛑 Closing the browser.");
+            console.log("Closing the browser.");
             await browser.close();
         }
     }
 }
 
-// 🚀 API Route
+// API endpoint
 app.get("/api/track", async (req, res) => {
     const trackingNumber = req.query.num;
     if (!trackingNumber) {
         return res.status(400).json({ error: "Tracking number is required" });
     }
 
-    const result = await scrapeTracking(trackingNumber);
+    const result = await scrapeTrackingInfo(trackingNumber);
     res.json(result);
 });
 
-// 🚀 Start Express Server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
