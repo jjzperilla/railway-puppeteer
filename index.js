@@ -21,17 +21,12 @@ app.get("/api/track", async (req, res) => {
         console.log("Starting to scrape tracking number:", trackingNumber);
 
         // Launch Chromium and log confirmation
-browser = await puppeteer.launch({
-    headless: "new",
-    args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--no-zygote",
-        "--single-process"
-    ]
-});
+        browser = await puppeteer.launch({
+            headless: "new", // Use the latest headless mode
+           
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+            timeout: 180000 // Increase browser launch timeout
+        });
 
         console.log("Chromium launched successfully");
 
