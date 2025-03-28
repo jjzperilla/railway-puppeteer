@@ -3,19 +3,19 @@
 
 [phases.setup]
   nixPkgs = [
-    "nss", 
-    "gtk3", 
-    "glibc", 
-    "chromium", 
-    "atk", 
-    "cups", 
-    "alsa-lib", 
-    "pango", 
-    "libxshmfence", 
-    "libx11", 
-    "mesa", 
-    "mesa_drivers", 
-    "libxcomposite", 
-    "libxdamage", 
-    "libxrandr"
+    "nss",                # ✅ Fixed
+    "gtk3",
+    "glibc",
+    "chromium",
+    "atk",
+    "cups",
+    "alsa-lib",
+    "pango",
+    "libxshmfence",
+    "mesa",
+    "mesa_drivers",
+    "xorg.libX11",        # ✅ Fixed
+    "xorg.libXcomposite", # ✅ Fixed
+    "xorg.libXdamage",    # ✅ Fixed
+    "xorg.libXrandr"      # ✅ Fixed
   ]
