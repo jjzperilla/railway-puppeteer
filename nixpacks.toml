@@ -9,14 +9,13 @@
     "chromium", 
     "atk", 
     "cups", 
-    "gbm", 
     "alsa-lib", 
     "pango", 
     "libxshmfence", 
     "libx11", 
     "mesa", 
+    "mesa_drivers",
     "libxcomposite", 
     "libxdamage", 
-    "libxrandr", 
-    "libasound2"
+    "libxrandr"
   ]
