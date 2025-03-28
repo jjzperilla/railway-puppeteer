@@ -1,2 +1,4 @@
 [build]
   node_version = "20"
+[phases.setup]
+nixPkgs = ["libnss", "gtk3", "glibc", "chromium", "atk", "cups", "gbm", "asoundlib", "pango", "libxshmfence"]

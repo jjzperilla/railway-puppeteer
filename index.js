@@ -23,16 +23,23 @@ async function scrapeTracking(trackingNumber, attempt = 1) {
     try {
         console.log(`[Attempt ${attempt}] Scraping tracking number:`, trackingNumber);
 
-        browser = await puppeteer.launch({
-            headless: false, // Run in headful mode to reduce detection
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-infobars",
-            ],
-            timeout: 180000,
-        });
+     browser = await puppeteer.launch({
+    headless: true, // Use true instead of "new" for better compatibility
+    args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-software-rasterizer",
+        "--disable-features=site-per-process",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-sync",
+        "--disable-default-apps",
+        "--no-first-run"
+    ],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined // Required for Railway
+});
 
         console.log("✅ Chromium launched successfully");
 
