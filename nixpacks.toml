@@ -12,10 +12,10 @@
     "alsa-lib",
     "pango",
     "mesa",
-    "mesa_drivers",
+    "mesa.drivers",  # ✅ Fixed
     "xorg.libX11",
     "xorg.libXcomposite",
     "xorg.libXdamage",
     "xorg.libXrandr",
-    "xorg.libXshmfence"  # ✅ Fixed
+    "xorg.libXshmfence"
   ]
