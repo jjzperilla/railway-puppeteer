@@ -3,7 +3,7 @@
     "nixpacks": {
       "phases": {
         "setup": {
-          "pkgs": ["chromium"]
+          "pkgs": ["chromium", "nss", "freetype", "harfbuzz", "ca-certificates", "ttf-freefont"]
         }
       }
     }
