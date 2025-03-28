@@ -20,10 +20,8 @@ app.get("/api/track", async (req, res) => {
     try {
         console.log("Starting to scrape tracking number:", trackingNumber);
 
-        // Launch Chromium and log confirmation
         browser = await puppeteer.launch({
             headless: "new", // Use the latest headless mode
-           
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
             timeout: 180000 // Increase browser launch timeout
         });
@@ -31,33 +29,29 @@ app.get("/api/track", async (req, res) => {
         console.log("Chromium launched successfully");
 
         const page = await browser.newPage();
-
         await page.setUserAgent(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         );
-
         await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
 
-        // Block unnecessary resources to speed up the load
-		
+        // Block unnecessary resources
         await page.setRequestInterception(true);
-page.setRequestInterception(true);
-page.on('request', (request) => {
-    if (['image', 'stylesheet', 'font'].includes(request.resourceType())) {
-        request.abort();
-    } else {
-        request.continue();
-    }
-});
+        page.on('request', (request) => {
+            if (["image", "stylesheet", "font"].includes(request.resourceType())) {
+                request.abort();
+            } else {
+                request.continue();
+            }
+        });
 
         console.log("Navigating to:", url);
 
-        // Set the waitUntil to "domcontentloaded" for faster loading
         await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });
 
-        await page.waitForFunction(() => {
-            return !document.body.innerText.includes("Please reload the page");
-        }, { timeout: 120000 }).catch(() => console.log("Wait function timed out"));
+        // Wait for a known element on the page to ensure full load
+        await page.waitForSelector(".event", { timeout: 120000 })
+            .then(() => console.log("Tracking events found, page fully loaded."))
+            .catch(() => console.log("Wait for tracking events timed out, page may not be fully loaded."));
 
         console.log("Page loaded, scraping data...");
 
@@ -72,7 +66,6 @@ page.on('request', (request) => {
 
         const parcelInfo = await page.evaluate(() => {
             const getText = (selector) => document.querySelector(selector)?.innerText.trim() || "N/A";
-
             return {
                 tracking_number: getText(".parcel-attributes tr:nth-child(1) .value span"),
                 origin: getText(".parcel-attributes tr:nth-child(2) .value span:nth-child(2)"),
