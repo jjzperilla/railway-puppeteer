@@ -3,7 +3,7 @@
 
 [phases.setup]
   nixPkgs = [
-    "libnss", 
+    "nss", 
     "gtk3", 
     "glibc", 
     "chromium", 
@@ -14,7 +14,7 @@
     "libxshmfence", 
     "libx11", 
     "mesa", 
-    "mesa_drivers",
+    "mesa_drivers", 
     "libxcomposite", 
     "libxdamage", 
     "libxrandr"
