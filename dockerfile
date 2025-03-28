@@ -1,32 +1,27 @@
-FROM node:20-alpine
-
-# Install Chromium dependencies
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    # Additional dependencies for newer Puppeteer
-    udev \
-    ttf-opensans
-
-# Set Puppeteer env vars
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+FROM node:18
 
 WORKDIR /app
+COPY package*.json ./
+RUN npm install
 
-# Copy package files first for better caching
-COPY package.json package-lock.json ./
+# Install Puppeteer dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libxcomposite1 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libgtk-3-0 \
+    libxdamage1 \
+    libx11-xcb1 \
+    --no-install-recommends && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install production dependencies only
-RUN npm ci --omit=dev
-
-# Copy the rest of the app
 COPY . .
-
-EXPOSE 8080
-USER node
-CMD ["node", "index.js"]
+CMD ["npm", "start"]
