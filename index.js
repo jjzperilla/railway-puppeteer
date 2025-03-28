@@ -1,14 +1,20 @@
 const express = require("express");
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const RecaptchaPlugin = require("puppeteer-extra-plugin-recaptcha");
 const cors = require("cors");
 
 puppeteer.use(StealthPlugin());
+puppeteer.use(
+    RecaptchaPlugin({
+        visualFeedback: true, // Shows a visual hint when a captcha is detected
+    })
+);
 
 const app = express();
 app.use(cors());
 
-const MAX_RETRIES = 3; // Set max retry attempts
+const MAX_RETRIES = 3; // Retry limit
 
 async function scrapeTracking(trackingNumber, attempt = 1) {
     const url = `https://parcelsapp.com/en/tracking/${trackingNumber}`;
@@ -18,9 +24,14 @@ async function scrapeTracking(trackingNumber, attempt = 1) {
         console.log(`[Attempt ${attempt}] Scraping tracking number:`, trackingNumber);
 
         browser = await puppeteer.launch({
-            headless: "new", // Use latest headless mode
-            args: ["--no-sandbox", "--disable-setuid-sandbox"],
-            timeout: 180000, // Increase browser launch timeout
+            headless: false, // Run in headful mode to reduce detection
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+            ],
+            timeout: 180000,
         });
 
         console.log("✅ Chromium launched successfully");
@@ -28,17 +39,17 @@ async function scrapeTracking(trackingNumber, attempt = 1) {
         const page = await browser.newPage();
 
         await page.setUserAgent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         );
 
         await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
 
-        // 🚀 **Anti-Bot Detection Bypass**
+        // 🚀 Anti-Bot Detection Bypass
         await page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+            Object.defineProperty(navigator, "webdriver", { get: () => false });
         });
 
-        // Block unnecessary resources (images, fonts, stylesheets)
+        // Block unnecessary resources
         await page.setRequestInterception(true);
         page.on("request", (request) => {
             if (["image", "stylesheet", "font"].includes(request.resourceType())) {
@@ -49,11 +60,15 @@ async function scrapeTracking(trackingNumber, attempt = 1) {
         });
 
         console.log("🌍 Navigating to:", url);
-        await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-        await page.waitForFunction(() => {
-            return !document.body.innerText.includes("Please reload the page");
-        }, { timeout: 120000 }).catch(() => console.log("⚠️ Wait function timed out"));
+        // ✅ Solve CAPTCHA if needed
+        await page.solveRecaptchas();
+
+        // 🔄 Wait for tracking data to load
+        await page.waitForSelector(".event", { timeout: 60000 }).catch(() => {
+            console.log("⚠️ Tracking data not found, waiting longer...");
+        });
 
         console.log("✅ Page loaded, scraping data...");
 

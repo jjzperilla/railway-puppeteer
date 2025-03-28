@@ -9,6 +9,7 @@
     "inflight": "^1.0.6",
     "puppeteer": "^24.4.0",
     "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "rimraf": "^6.0.1",
     "user-agents": "^1.0.110"
