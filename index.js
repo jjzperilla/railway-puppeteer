@@ -37,7 +37,6 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
     let browser;
 
     try {
-        // Launch the browser in headless mode
         browser = await chromium.launch({ headless: true });
         console.log("✅ Chromium launched successfully");
 
@@ -54,17 +53,16 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
 
         console.log("🌍 Navigating to:", url);
 
-        // Reduce timeout and use "domcontentloaded" for faster loading
         try {
-            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 }); // Reduced timeout
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
             console.log("✅ Page loaded.");
         } catch (error) {
             console.log("⚠️ Page loading failed, retrying...");
             await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
         }
 
-        // Wait for essential elements (reduced timeout)
-        await page.waitForSelector(".event, .parcel-attributes", { timeout: 10000 });
+        // Wait for elements to be visible (increased timeout)
+        await page.waitForSelector(".event, .parcel-attributes", { visible: true, timeout: 30000 });
 
         const trackingEvents = await page.evaluate(() => {
             return Array.from(document.querySelectorAll(".event")).map(event => ({
