@@ -1,3 +1,15 @@
 TimeoutError: page.waitForSelector: Timeout 30000ms exceeded.
 Call log:
 [2m  - waiting for locator('.event, .parcel-attributes') to be visible[22m
+2025-04-01T13:22:27.394Z - page.goto: Timeout 120000ms exceeded.
+Call log:
+[2m  - navigating to "https://parcelsapp.com/en/tracking/JY25CA00U002056270", waiting until "networkidle"[22m
+
+    at scrapeTrackingInfo (C:\Users\jjzpe\railway-puppeteer\index.js:71:20)
+    at async C:\Users\jjzpe\railway-puppeteer\index.js:213:20
+2025-04-01T13:24:32.653Z - page.goto: Timeout 120000ms exceeded.
+Call log:
+[2m  - navigating to "https://parcelsapp.com/en/tracking/JY25CA00U002056270", waiting until "networkidle"[22m
+
+    at scrapeTrackingInfo (C:\Users\jjzpe\railway-puppeteer\index.js:71:20)
+    at async C:\Users\jjzpe\railway-puppeteer\index.js:213:20

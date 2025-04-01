@@ -1,0 +1,4 @@
+node_modules/
+debug_attempt_*.png
+debug_attempt_*.html
+error_log.txt

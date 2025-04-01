@@ -1,128 +1,117 @@
 const express = require("express");
-const { chromium } = require("playwright");
+const { chromium } = require("playwright-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth")();
 const cors = require("cors");
-const fs = require("fs");
+
+// Apply stealth plugin
+chromium.use(StealthPlugin);
 
 const app = express();
 app.use(cors());
 
+// Configuration
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 5000;
+const RETRY_DELAY = 10000;
+const PAGE_LOAD_TIMEOUT = 60000;
+const BROWSER_LAUNCH_TIMEOUT = 120000;
 
-async function applyStealth(context) {
-    await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
+const USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+];
 
-    await context.addInitScript(() => {
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) =>
-            parameters.name === 'notifications'
-                ? Promise.resolve({ state: Notification.permission })
-                : originalQuery(parameters);
-    });
+const SELECTOR_CONFIGS = [
+    {
+        events: ".event",
+        time: ".event-time strong",
+        status: ".event-content strong",
+        courier: ".carrier",
+        attributes: ".parcel-attributes"
+    }
+];
 
-    await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-    });
+function getRandomUserAgent() {
+    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
 
-    await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+async function createBrowserInstance() {
+    return await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        timeout: BROWSER_LAUNCH_TIMEOUT
     });
 }
 
-async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
-    console.log(`\n📦 Attempt ${attempt}: Scraping tracking number: ${trackingNumber}`);
-    const url = `https://parcelsapp.com/en/tracking/${trackingNumber}`;
-    let browser;
-
+async function extractWithConfig(page, config) {
     try {
-        browser = await chromium.launch({ headless: true });
-        console.log("✅ Chromium launched successfully");
-
-        const context = await browser.newContext({
-            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
-        });
-
-        // Block unnecessary resources like images and styles
-        await context.route("**/*.{png,jpg,jpeg,css,svg}", (route) => route.abort());
-
-        const page = await context.newPage();
-        await applyStealth(page);
-
-        console.log("🌍 Navigating to:", url);
-
-        try {
-            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-            console.log("✅ Page loaded.");
-        } catch (error) {
-            console.log("⚠️ Page loading failed, retrying...");
-            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-        }
-
-        // Wait for elements to be visible (increased timeout)
-        await page.waitForSelector(".event, .parcel-attributes", { visible: true, timeout: 120000 });
-
-        const trackingEvents = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll(".event")).map(event => ({
-                date: event.querySelector(".event-time strong")?.innerText.trim() || "N/A",
-                time: event.querySelector(".event-time span")?.innerText.trim() || "N/A",
-                status: event.querySelector(".event-content strong")?.innerText.trim() || "N/A",
-                courier: event.querySelector(".carrier")?.innerText.trim() || "N/A",
-            })).filter(event => event.date !== "N/A");
-        });
-
-        const parcelInfo = await page.evaluate(() => {
-            const getText = (selector) => document.querySelector(selector)?.innerText.trim() || "N/A";
-            return {
-                tracking_number: getText(".parcel-attributes tr:nth-child(1) .value span"),
-                origin: getText(".parcel-attributes tr:nth-child(2) .value span:nth-child(2)"),
-                destination: getText(".parcel-attributes tr:nth-child(3) .value span:nth-child(2)"),
-                courier: getText(".parcel-attributes tr:nth-child(4) .value a"),
-                days_in_transit: getText(".parcel-attributes tr:nth-child(6) .value span"),
-                tracking_link: getText(".tracking-link input"),
-            };
-        });
-
-        console.log("✅ Scraped data:", trackingEvents, parcelInfo);
-
-        if (!trackingEvents.length && attempt < MAX_RETRIES) {
-            console.log(`🔄 No tracking data found. Retrying in ${RETRY_DELAY / 1000} seconds...`);
-            await browser.close();
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-            return scrapeTrackingInfo(trackingNumber, attempt + 1);
-        }
-
-        return { tracking_details: trackingEvents, parcel_info: parcelInfo };
+        await page.waitForSelector(config.events, { timeout: 10000 });
+        if (page.isClosed()) throw new Error("Page closed before extraction");
+        
+        const trackingEvents = await page.evaluate(cfg => {
+            return Array.from(document.querySelectorAll(cfg.events)).map(event => ({
+                date: event.querySelector(cfg.time)?.textContent.trim() || "N/A",
+                status: event.querySelector(cfg.status)?.textContent.trim() || "N/A",
+                courier: event.querySelector(cfg.courier)?.textContent.trim() || "N/A"
+            }));
+        }, config);
+        
+        return trackingEvents.length > 0 ? { trackingEvents } : null;
     } catch (error) {
-        console.error(`❌ Error on attempt ${attempt}:`, error);
-        fs.writeFileSync("error_log.txt", error.toString(), "utf-8");
+        console.warn(`⚠️ Selector config failed: ${error.message}`);
+    }
+    return null;
+}
 
-        if (attempt < MAX_RETRIES) {
-            console.log(`🔄 Retrying attempt ${attempt + 1} in ${RETRY_DELAY / 1000} seconds...`);
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-            return scrapeTrackingInfo(trackingNumber, attempt + 1);
-        }
+async function scrapeWithRetry(trackingNumber) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        let browser, context, page;
+        try {
+            console.log(`📦 Attempt ${attempt}: Scraping ${trackingNumber}`);
+            browser = await createBrowserInstance();
+            context = await browser.newContext({ userAgent: getRandomUserAgent() });
+            page = await context.newPage();
 
-        return { error: error.message };
-    } finally {
-        if (browser) {
-            console.log("🛑 Closing the browser.");
-            await browser.close();
+            page.on('close', () => console.log('⚠️ Page closed unexpectedly!'));
+            console.log("🌍 Navigating to tracking page");
+            await page.goto(`https://parcelsapp.com/en/tracking/${trackingNumber}`, {
+                waitUntil: "domcontentloaded",
+                timeout: PAGE_LOAD_TIMEOUT
+            });
+
+            if (page.isClosed()) throw new Error("Page closed before extraction");
+
+            for (const config of SELECTOR_CONFIGS) {
+                const result = await extractWithConfig(page, config);
+                if (result) {
+                    console.log("✅ Data extracted successfully");
+                    return { tracking_details: result.trackingEvents, status: "success", attempts: attempt };
+                }
+            }
+            throw new Error("All selector configurations failed");
+        } catch (error) {
+            console.error(`❌ Attempt ${attempt} failed:`, error.message);
+            lastError = error;
+            if (attempt < MAX_RETRIES) await new Promise(res => setTimeout(res, RETRY_DELAY));
+        } finally {
+            try { if (page) await page.close(); } catch (e) {}
+            try { if (context) await context.close(); } catch (e) {}
+            try { if (browser) await browser.close(); } catch (e) {}
         }
     }
+    return { error: "Failed after all attempts", details: lastError?.message || "Unknown error", status: "error", attempts: MAX_RETRIES };
 }
-
-
 
 app.get("/api/track", async (req, res) => {
-    const trackingNumber = req.query.num;
-    if (!trackingNumber) {
-        return res.status(400).json({ error: "Tracking number is required" });
+    try {
+        const trackingNumber = req.query.num;
+        if (!trackingNumber) return res.status(400).json({ error: "Tracking number required", status: "bad_request" });
+        const result = await scrapeWithRetry(trackingNumber);
+        res.json(result);
+    } catch (error) {
+        console.error("API Error:", error);
+        res.status(500).json({ error: "Internal server error", status: "server_error" });
     }
-    const result = await scrapeTrackingInfo(trackingNumber);
-    res.json(result);
 });
 
 app.get("/api/health", (req, res) => {
@@ -130,6 +119,4 @@ app.get("/api/health", (req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
