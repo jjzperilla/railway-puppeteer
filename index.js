@@ -37,15 +37,16 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
     let browser;
 
     try {
-        browser = await chromium.launch({ headless: false });
+        // Launch the browser in headless mode
+        browser = await chromium.launch({ headless: true });
         console.log("✅ Chromium launched successfully");
 
         const context = await browser.newContext({
             userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
         });
-        await applyStealth(context);
         const page = await context.newPage();
+        await applyStealth(page);
 
         console.log("🌍 Navigating to:", url);
 
@@ -109,6 +110,7 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
         }
     }
 }
+
 
 app.get("/api/track", async (req, res) => {
     const trackingNumber = req.query.num;
