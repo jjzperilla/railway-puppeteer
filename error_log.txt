@@ -1,1 +1,1 @@
-Error: Attempted to use detached Frame 'F9B251B0D9B28A99A58D793437119918'.
+TypeError: page.evaluateOnNewDocument is not a function

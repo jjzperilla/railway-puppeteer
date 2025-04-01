@@ -1,16 +1,35 @@
 const express = require("express");
-const puppeteer = require("puppeteer-extra");
-const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const { chromium } = require("playwright");
 const cors = require("cors");
 const fs = require("fs");
-
-puppeteer.use(StealthPlugin());
 
 const app = express();
 app.use(cors());
 
-const MAX_RETRIES = 3; // Maximum retry attempts
-const RETRY_DELAY = 5000; // 5 seconds delay before retrying
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000;
+
+async function applyStealth(context) {
+    await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+
+    await context.addInitScript(() => {
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) =>
+            parameters.name === 'notifications'
+                ? Promise.resolve({ state: Notification.permission })
+                : originalQuery(parameters);
+    });
+
+    await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    });
+
+    await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    });
+}
 
 async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
     console.log(`\n📦 Attempt ${attempt}: Scraping tracking number: ${trackingNumber}`);
@@ -18,64 +37,38 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
     let browser;
 
     try {
-        // Launch browser
-        browser = await puppeteer.launch({
-            headless: "new",
-            args: ["--no-sandbox", "--disable-setuid-sandbox"],
-            timeout: 180000,
-        });
+        browser = await chromium.launch({ headless: false });
         console.log("✅ Chromium launched successfully");
 
-        const page = await browser.newPage();
-        await page.setUserAgent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-        );
-        await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
-
-        // Block unnecessary resources
-        await page.setRequestInterception(true);
-        page.on("request", (request) => {
-            if (["image", "stylesheet", "font"].includes(request.resourceType())) {
-                request.abort();
-            } else {
-                request.continue();
-            }
+        const context = await browser.newContext({
+            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+            extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
         });
+        await applyStealth(context);
+        const page = await context.newPage();
 
         console.log("🌍 Navigating to:", url);
 
         try {
+            await page.goto(url, { waitUntil: "networkidle", timeout: 120000 });
+            console.log("✅ Page loaded.");
+        } catch (error) {
+            console.log("⚠️ Page loading failed, retrying...");
             await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
-            console.log("✅ DOM content loaded.");
-        } catch (error) {
-            console.log("⚠️ DOM content loading failed, trying full load...");
-            await page.goto(url, { waitUntil: "load", timeout: 120000 });
         }
 
-        // Wait for tracking details
-        try {
-            await page.waitForSelector(".event, .parcel-attributes", { timeout: 10000 });
-        } catch (error) {
-            console.warn("⚠️ Tracking details did not load within 10s, proceeding...");
-        }
-
-        // Take a screenshot for debugging
+        await page.waitForSelector(".event, .parcel-attributes", { timeout: 15000 });
         await page.screenshot({ path: `debug_attempt_${attempt}.png`, fullPage: true });
-        fs.writeFileSync(`debug_attempt_${attempt}.html`, await page.content(), "utf8");
 
-        // Extract tracking events
         const trackingEvents = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll(".event"))
-                .map(event => ({
-                    date: event.querySelector(".event-time strong")?.innerText.trim() || "N/A",
-                    time: event.querySelector(".event-time span")?.innerText.trim() || "N/A",
-                    status: event.querySelector(".event-content strong")?.innerText.trim() || "N/A",
-                    courier: event.querySelector(".carrier")?.innerText.trim() || "N/A",
-                }))
-                .filter(event => event.date !== "N/A");
+            return Array.from(document.querySelectorAll(".event")).map(event => ({
+                date: event.querySelector(".event-time strong")?.innerText.trim() || "N/A",
+                time: event.querySelector(".event-time span")?.innerText.trim() || "N/A",
+                status: event.querySelector(".event-content strong")?.innerText.trim() || "N/A",
+                courier: event.querySelector(".carrier")?.innerText.trim() || "N/A",
+            })).filter(event => event.date !== "N/A");
         });
 
-        // Extract parcel information
         const parcelInfo = await page.evaluate(() => {
             const getText = (selector) => document.querySelector(selector)?.innerText.trim() || "N/A";
             return {
@@ -117,18 +110,15 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
     }
 }
 
-// API endpoint
 app.get("/api/track", async (req, res) => {
     const trackingNumber = req.query.num;
     if (!trackingNumber) {
         return res.status(400).json({ error: "Tracking number is required" });
     }
-
     const result = await scrapeTrackingInfo(trackingNumber);
     res.json(result);
 });
 
-// Health Check Endpoint
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
 });

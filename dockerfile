@@ -1,27 +1,18 @@
-FROM node:18
+# Use an official Node.js runtime as a parent image
+FROM mcr.microsoft.com/playwright:focal
 
+# Set the working directory in the container
 WORKDIR /app
-COPY package*.json ./
+
+# Copy package.json and package-lock.json before running npm install
+COPY package.json package-lock.json ./
 RUN npm install
 
-# Install Puppeteer dependencies
-RUN apt-get update && apt-get install -y \
-    wget \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libxcomposite1 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpangocairo-1.0-0 \
-    libgtk-3-0 \
-    libxdamage1 \
-    libx11-xcb1 \
-    --no-install-recommends && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
+# Copy the rest of the application
 COPY . .
-CMD ["npm", "start"]
+
+# Expose port 8080 for Railway
+EXPOSE 8080
+
+# Start the server
+CMD ["node", "index.js"]
