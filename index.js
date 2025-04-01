@@ -62,7 +62,7 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
         }
 
         // Wait for elements to be visible (increased timeout)
-        await page.waitForSelector(".event, .parcel-attributes", { visible: true, timeout: 30000 });
+        await page.waitForSelector(".event, .parcel-attributes", { visible: true, timeout: 120000 });
 
         const trackingEvents = await page.evaluate(() => {
             return Array.from(document.querySelectorAll(".event")).map(event => ({

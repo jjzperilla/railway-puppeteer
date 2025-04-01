@@ -1,1 +1,3 @@
-TypeError: page.evaluateOnNewDocument is not a function
+TimeoutError: page.waitForSelector: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('.event, .parcel-attributes') to be visible[22m
