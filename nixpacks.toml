@@ -1,2 +1,5 @@
 [phases.setup]
-cmds = ["npx playwright install --with-deps"]
+cmds = [
+    "chmod +x node_modules/.bin/playwright",
+    "npx playwright install --with-deps"
+]

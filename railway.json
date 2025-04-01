@@ -1,5 +1,5 @@
 {
   "build": {
-    "cmd": "npx playwright install --with-deps"
+    "cmd": "chmod +x node_modules/.bin/playwright && npx playwright install --with-deps"
   }
 }
