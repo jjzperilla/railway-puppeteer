@@ -1,2 +1,2 @@
-[build]
-  node_version = "20"
+[phases.setup]
+cmds = ["npx playwright install --with-deps"]
