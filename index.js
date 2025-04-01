@@ -45,21 +45,26 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
             userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
         });
+
+        // Block unnecessary resources like images and styles
+        await context.route("**/*.{png,jpg,jpeg,css,svg}", (route) => route.abort());
+
         const page = await context.newPage();
         await applyStealth(page);
 
         console.log("🌍 Navigating to:", url);
 
+        // Reduce timeout and use "domcontentloaded" for faster loading
         try {
-            await page.goto(url, { waitUntil: "networkidle", timeout: 120000 });
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 }); // Reduced timeout
             console.log("✅ Page loaded.");
         } catch (error) {
             console.log("⚠️ Page loading failed, retrying...");
-            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
         }
 
-        await page.waitForSelector(".event, .parcel-attributes", { timeout: 15000 });
-        await page.screenshot({ path: `debug_attempt_${attempt}.png`, fullPage: true });
+        // Wait for essential elements (reduced timeout)
+        await page.waitForSelector(".event, .parcel-attributes", { timeout: 10000 });
 
         const trackingEvents = await page.evaluate(() => {
             return Array.from(document.querySelectorAll(".event")).map(event => ({
@@ -110,6 +115,7 @@ async function scrapeTrackingInfo(trackingNumber, attempt = 1) {
         }
     }
 }
+
 
 
 app.get("/api/track", async (req, res) => {
