@@ -30,7 +30,7 @@ jobs:
         uses: denoland/deployctl@v1
         with:
           project: "jjzperilla-railway-pup-20"
-          entrypoint: "index.js"
+          entrypoint: ""
           root: ""
           
           
